@@ -1,3 +1,5 @@
+from supabase_client import supabase
+from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -29,17 +31,20 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 genai.configure(api_key=GEMINI_API_KEY)
 
+######## --- Campaign Context Generation Logic --- #######
 # Input schema (matches your frontend payload)
 class CampaignInput(BaseModel):
     initialMessage: str
-    answers: List[str]
+    qaPairs: List[dict]
 
 @app.post("/api/campaign-context")
 async def generate_campaign_context(data: CampaignInput):
     # Combine the input into one string
     conversation_text = f"Initial message: {data.initialMessage}\n\n"
-    for i, ans in enumerate(data.answers, 1):
-        conversation_text += f"Answer {i}: {ans}\n"
+    for i, qa in enumerate(data.qaPairs, 1):
+        question = qa.get('question', f'Question {i}')
+        answer = qa.get('answer', '')
+        conversation_text += f"Q{i}: {question}\nA{i}: {answer}\n"
 
     prompt = f"""
     You are a marketing strategist AI. 
@@ -77,3 +82,51 @@ async def generate_campaign_context(data: CampaignInput):
         final_context = f"Error while generating context: {str(e)}"
 
     return {"finalContext": final_context}
+
+########## --- Campaign Launch Logic --- ##########
+# Input schema (matches your frontend payload)
+class LaunchCampaignInput(BaseModel):
+    summary: str
+
+# Simple matching logic 
+def match_users_with_summary(summary: str) -> list[dict]:
+    # Example: match users by domain, role, or keywords in summary
+    # You should adjust this logic to your schema and matching strategy
+    # For demo, we fetch all users and filter by keyword in summary
+    response = supabase.table("PotentialLeads").select("*").execute()
+    # print(f"Supabase response: {response.data}")
+    users = response.data if hasattr(response, 'data') else response
+    matched = []
+    summary_lower = summary.lower()
+    for user in users:
+        # Example: match if any keyword in summary is in user's domain or role
+        domain = user.get("domain", "").lower()
+        role = user.get("role", "").lower()
+
+        if domain and domain in summary_lower:
+            matched.append(user)
+        elif role and role in summary_lower:
+            matched.append(user)
+    return matched
+
+@app.post("/api/launch-campaign")
+async def launch_campaign(data: LaunchCampaignInput):
+    summary = data.summary
+    matched_users = match_users_with_summary(summary)
+    # You can format the campaigns as needed for frontend
+    campaigns = [
+        {
+            "id": str(user.get("id", "")),
+            "target": {
+                "username": user.get("username", ""),
+                "avatar": user.get("avatar", "U"),
+                "domain": user.get("domain", ""),
+                "role": user.get("role", ""),
+                "tg_id": user.get("tg_id", "")
+            },
+            "status": "contacting",
+            "lastInteraction": "just now"
+        }
+        for user in matched_users
+    ]
+    return {"campaigns": campaigns}

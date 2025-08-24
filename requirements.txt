@@ -2,3 +2,4 @@ uvicorn
 fastapi
 google-generativeai
 openai
+supabase

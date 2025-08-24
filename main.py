@@ -1,5 +1,5 @@
 from supabase_client import supabase
-from typing import Any
+# from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -8,6 +8,10 @@ import os
 import openai
 import google.generativeai as genai
 from dotenv import load_dotenv
+# import sys
+import asyncio
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../tg_agent')))
+from tg_agent import run_telegram_agent 
 
 app = FastAPI()
 
@@ -122,11 +126,23 @@ async def launch_campaign(data: LaunchCampaignInput):
                 "avatar": user.get("avatar", "U"),
                 "domain": user.get("domain", ""),
                 "role": user.get("role", ""),
-                "tg_id": user.get("tg_id", "")
+                "tg_id": user.get("tg_id", ""),
+                "per_desc": user.get("person_description", ""),
             },
             "status": "contacting",
             "lastInteraction": "just now"
         }
         for user in matched_users
     ]
+
+        # Call run_telegram_agent for each matched user (fire and forget)
+    for user in matched_users:
+        tg_id = user.get("tg_id", "")
+        if tg_id:
+            product_summary = data.summary
+            target_description = user.get("person_description", "")
+            # asyncio.create_task(run_telegram_agent(product_summary, target_description, tg_id))
+            run_telegram_agent(product_summary, target_description, tg_id)
+        break
+
     return {"campaigns": campaigns}
